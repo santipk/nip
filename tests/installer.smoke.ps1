@@ -22,6 +22,7 @@ try {
     if ($process.ExitCode -ne 0) { throw "Installer exited $($process.ExitCode)" }
     $exe = Join-Path $installDir 'NIP.exe'
     if (-not (Test-Path -LiteralPath $exe)) { throw 'Installed executable missing' }
+    if (-not (Test-Path -LiteralPath (Join-Path $installDir 'Uninstall NIP.exe'))) { throw 'Installed uninstaller missing' }
     $entries = @(Get-ChildItem $uninstallRoot | Get-ItemProperty | Where-Object { $_.DisplayName -match '^NIP(?: \d.*)?$' })
     if ($entries.Count -ne 1) { throw 'Expected one per-user uninstall entry' }
     if (-not (Test-Path -LiteralPath $desktopLink)) { throw 'Desktop shortcut missing' }
@@ -43,6 +44,8 @@ try {
         $remaining = @(Get-ChildItem $uninstallRoot | Get-ItemProperty | Where-Object { $_.DisplayName -match '^NIP(?: \d.*)?$' })
         if ($remaining.Count -ne 0) { throw 'Uninstall entry was not removed' }
         if ((Test-Path -LiteralPath $desktopLink) -or (Test-Path -LiteralPath $startLink)) { throw 'Uninstaller left shortcuts behind' }
+    } elseif (Test-Path -LiteralPath (Join-Path $installDir 'NIP.exe')) {
+        throw 'Installed app has no uninstaller; manual cleanup of the test directory is needed.'
     }
 }
 if ((Get-Content -Raw -LiteralPath $marker).Trim() -ne 'installer-smoke') { throw 'Isolated profile was changed by uninstall' }
