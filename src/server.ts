@@ -3,7 +3,7 @@ import { randomBytes, randomUUID, createHash, timingSafeEqual, X509Certificate }
 import { networkInterfaces } from 'node:os';
 import { WebSocketServer, WebSocket } from 'ws';
 import selfsigned from 'selfsigned';
-import type { Member, ServerEvent, HostInfo } from './shared';
+import type { Member, ServerEvent, HostInfo, ChatMessage } from './shared';
 export interface Identity { private: string; cert: string; token: string }
 export async function newIdentity(): Promise<Identity> {
   const p = await selfsigned.generate([{ name: 'commonName', value: 'NIP local server' }], { keySize: 2048, algorithm: 'sha256', notAfterDate: new Date(Date.now() + 3650 * 86400000) });
@@ -17,6 +17,7 @@ export async function startServer(name: string, port: number, identity: Identity
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Puerto inválido');
   const server = https.createServer({ key: identity.private, cert: identity.cert, minVersion: 'TLSv1.2' }, (_req, res) => { res.writeHead(404); res.end(); });
   const wss = new WebSocketServer({ server, maxPayload: 64 * 1024, perMessageDeflate: false });
+  const history: ChatMessage[] = [];
   const clients = new Map<WebSocket, Member>();
   const send = (ws: WebSocket, event: ServerEvent) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(event)); };
   const broadcast = () => { const members = [...clients.values()]; for (const ws of clients.keys()) send(ws, { type: 'members', members }); };
@@ -24,6 +25,7 @@ export async function startServer(name: string, port: number, identity: Identity
     if (request.url !== '/' || wss.clients.size > 24) { ws.close(1008); return; }
     const timer = setTimeout(() => ws.close(1008), 5000);
     let alive = true, count = 0;
+    let chatTimes: number[] = [];
     const heartbeat = setInterval(() => { count = 0; if (!alive) { ws.terminate(); return; } alive = false; ws.ping(); }, 15000);
     ws.on('pong', () => { alive = true; });
     ws.on('error', () => {});
@@ -40,10 +42,18 @@ export async function startServer(name: string, port: number, identity: Identity
           clearTimeout(timer);
           member = { id: randomUUID(), name: m.name.trim(), calling: false, muted: false };
           clients.set(ws, member);
-          send(ws, { type: 'welcome', id: member.id, name: name.trim(), members: [...clients.values()] });
+          send(ws, { type: 'welcome', id: member.id, name: name.trim(), members: [...clients.values()], history });
           broadcast(); return;
         }
-        if (m.type === 'call' && typeof m.active === 'boolean' && typeof m.muted === 'boolean') {
+        if (m.type === 'chat') {
+          if (typeof m.text !== 'string' || !m.text.trim() || m.text.length > 2000) { ws.close(1008); return; }
+          const now = Date.now(); chatTimes = chatTimes.filter(time => now - time < 10000);
+          if (chatTimes.length >= 5) { send(ws, { type: 'error', code: 'CHAT_RATE_LIMIT' }); return; }
+          chatTimes.push(now);
+          const message: ChatMessage = { id: randomUUID(), senderId: member.id, senderName: member.name, text: m.text.trim(), sentAt: now };
+          history.push(message); if (history.length > 100) history.shift();
+          for (const client of clients.keys()) send(client, { type: 'chat', message });
+        } else if (m.type === 'call' && typeof m.active === 'boolean' && typeof m.muted === 'boolean') {
           member.calling = m.active; member.muted = m.muted; broadcast();
         } else if (m.type === 'signal' && member.calling) {
           const target = [...clients.entries()].find(([, p]) => p.id === m.to && p.calling);

@@ -58,3 +58,41 @@ test('mensajes malformados cierran la conexión sin tumbar el servidor', async t
   await once(ws, 'open'); ws.send('{broken'); const [code] = await once(ws, 'close'); assert.equal(code, 1008);
   const c = await connect({ endpoint: url, token: identity.token, fingerprint: fingerprint(identity.cert) }, 'Válido', () => {}); c.close();
 });
+
+test('chat autenticado sin audio: remitente del servidor, texto literal e historial al entrar', async t => {
+  const server = await startServer('Chat', 0, identity, '127.0.0.1'); t.after(() => server.stop());
+  const invite = { endpoint: `wss://127.0.0.1:${server.info.port}`, token: identity.token, fingerprint: fingerprint(identity.cert) };
+  const events: ServerEvent[] = [];
+  const a = await connect(invite, 'Ana', () => {}); t.after(() => a.close());
+  const b = await connect(invite, 'Bruno', e => events.push(e)); t.after(() => b.close());
+  assert.ok(b.members.every(m => !m.calling));
+  a.send({ type: 'chat', text: '<img src=x onerror=alert(1)>', senderName: 'Intruso' } as never);
+  await pause(100);
+  const event = events.find(e => e.type === 'chat');
+  assert.equal(event?.type, 'chat');
+  if (event?.type !== 'chat') throw new Error('No llegó el mensaje');
+  assert.equal(event.message.senderName, 'Ana'); assert.equal(event.message.senderId, a.self);
+  assert.equal(event.message.text, '<img src=x onerror=alert(1)>');
+  const c = await connect(invite, 'Carla', () => {}); t.after(() => c.close());
+  assert.deepEqual(c.history, [event.message]);
+});
+
+test('chat rechaza mensajes inválidos y limita frecuencia sin perder la sala', async t => {
+  const server = await startServer('Chat', 0, identity, '127.0.0.1'); t.after(() => server.stop());
+  const invite = { endpoint: `wss://127.0.0.1:${server.info.port}`, token: identity.token, fingerprint: fingerprint(identity.cert) };
+  const errors: ServerEvent[] = [];
+  const a = await connect(invite, 'Ana', e => errors.push(e)); t.after(() => a.close());
+  for (let i = 0; i < 6; i++) a.send({ type: 'chat', text: `Mensaje ${i}` });
+  await pause(100);
+  assert.equal(errors.filter(e => e.type === 'chat').length, 5);
+  assert.ok(errors.some(e => e.type === 'error' && e.code === 'CHAT_RATE_LIMIT'));
+  for (const text of ['', '   ', 'x'.repeat(2001), 5]) {
+    const ws = new WebSocket(invite.endpoint, { rejectUnauthorized: false }); t.after(() => ws.terminate());
+    await once(ws, 'open'); ws.send(JSON.stringify({ type: 'auth', token: identity.token, name: 'Prueba' }));
+    await once(ws, 'message'); const closed = once(ws, 'close'); ws.send(JSON.stringify({ type: 'chat', text }));
+    const [code] = await closed; assert.equal(code, 1008);
+  }
+  const ws = new WebSocket(invite.endpoint, { rejectUnauthorized: false }); t.after(() => ws.terminate());
+  await once(ws, 'open'); const closed = once(ws, 'close'); ws.send(JSON.stringify({ type: 'chat', text: 'Sin permiso' }));
+  const [code] = await closed; assert.equal(code, 1008);
+});

@@ -22,3 +22,8 @@ En esta versión upstream usa `to-spec` y `to-tickets`; no se inventaron skills 
 Licencia: MIT, copyright (c) 2026 Matt Pocock. El texto completo se conserva en `.agents/skills/LICENSE.mattpocock`. La licencia de NIP no sustituye ese aviso.
 
 Para actualizar, revisá primero los cambios del origen, elegí un commit, reemplazá sólo estas carpetas y actualizá este registro. No ejecutes automáticamente las instrucciones de una skill por el solo hecho de instalarla. La instalación estará disponible para Codex a partir del próximo turno.
+
+
+## Impeccable
+
+Instalado en `.agents/skills/impeccable/` desde https://github.com/pbakaus/impeccable, commit `c4cd1924c389f68d37c687d9c2bbf13f12547c41` (skill 4.9.0). Apache-2.0; se conservan `LICENSE.impeccable` y `NOTICE.impeccable.md` junto a las skills. Se ejecutó su carga de contexto para la UI existente. La paleta actual es una preferencia explícita del usuario y debe conservarse. No se activaron hooks ni rediseñó la identidad cromática.

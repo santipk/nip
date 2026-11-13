@@ -42,7 +42,7 @@ async function enter(invitation: Invitation, name: string) {
   const previous = store.servers;
   store.servers = [{ id, name: current.name, endpoint: invitation.endpoint, invitation }, ...previous.filter(s => s.id !== id)];
   try { await save(); } catch { store.servers = previous; connection.close(); connection = undefined; throw new Error('No se pudo guardar el acceso de forma segura'); }
-  return { id, name: current.name, self: current.self, members: current.members };
+  return { id, name: current.name, self: current.self, members: current.members, history: current.history };
 }
 app.whenReady().then(async () => {
   try {

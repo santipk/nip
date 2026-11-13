@@ -16,14 +16,16 @@ win:
   executableName: NIP
   requestedExecutionLevel: asInvoker
 nsis:
-  oneClick: true
+  oneClick: false
   perMachine: false
   allowElevation: false
   runAfterFinish: false
-  createDesktopShortcut: true
-  createStartMenuShortcut: true
+  createDesktopShortcut: false
+  createStartMenuShortcut: false
   shortcutName: NIP
   uninstallDisplayName: NIP
   deleteAppDataOnUninstall: false
   license: LICENSE
+  include: build/installer.nsh
+  installerLanguages: [es_ES]
 publish: null

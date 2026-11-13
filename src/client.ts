@@ -23,7 +23,7 @@ export async function connect(invite: Invitation, name: string, onEvent: (e: Ser
     return undefined as never;
   };
   const ws = new WebSocket(invite.endpoint, { agent, handshakeTimeout: 8000, maxPayload: 65536, followRedirects: false });
-  return await new Promise<{ self: string; name: string; members: import('./shared').Member[]; send(m: ClientMessage): void; close(): void }>((resolve, reject) => {
+  return await new Promise<{ self: string; name: string; members: import('./shared').Member[]; history: import('./shared').ChatMessage[]; send(m: ClientMessage): void; close(): void }>((resolve, reject) => {
     let authenticated = false;
     const timer = setTimeout(() => fail(new Error('Servidor inalcanzable o sin respuesta')), 10000);
     function fail(error: Error) { clearTimeout(timer); reject(error); ws.terminate(); agent.destroy(); }
@@ -35,7 +35,7 @@ export async function connect(invite: Invitation, name: string, onEvent: (e: Ser
           if (event.type === 'error') { fail(new Error('Permiso de invitación rechazado')); return; }
           if (event.type !== 'welcome') return;
           authenticated = true; clearTimeout(timer);
-          resolve({ self: event.id, name: event.name, members: event.members,
+          resolve({ self: event.id, name: event.name, members: event.members, history: event.history || [],
             send(m) { if (ws.readyState !== WebSocket.OPEN) throw new Error('Conexión cerrada'); ws.send(JSON.stringify(m)); },
             close() { ws.close(); agent.destroy(); }
           });

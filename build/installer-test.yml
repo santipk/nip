@@ -1,0 +1,8 @@
+extends: ./electron-builder.yml
+appId: com.santipk.nip.installer-test
+productName: NIP Installer Test
+directories:
+  output: work/installer-ui
+nsis:
+  shortcutName: NIP Installer Test
+  uninstallDisplayName: NIP Installer Test

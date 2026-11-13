@@ -1,7 +1,7 @@
 {
   "name": "nip-desktop",
   "productName": "NIP",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "NIP — llamadas de amigos en servidores autohospedados",
   "main": "dist/main.cjs",
@@ -14,7 +14,8 @@
     "package": "npm run build && electron-builder --dir --win --x64 --publish never",
     "test:package": "tsx --test tests/package.smoke.ts",
     "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never",
-    "test:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/installer.smoke.ps1"
+    "test:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/installer.smoke.ps1",
+    "dev:ui": "node scripts/preview.mjs"
   },
   "dependencies": {
     "selfsigned": "5.5.0",
