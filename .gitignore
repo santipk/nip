@@ -19,3 +19,9 @@ profile.json
 userData/
 profiles/
 .scratch/
+
+# Native build outputs
+native-prototype/target/
+
+native/target/
+native-prototype/
