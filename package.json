@@ -1,7 +1,7 @@
 {
   "name": "nip-desktop",
   "productName": "NIP",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "NIP — llamadas de amigos en servidores autohospedados",
   "main": "dist/main.cjs",

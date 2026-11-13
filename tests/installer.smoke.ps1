@@ -2,7 +2,12 @@ $ErrorActionPreference = 'Stop'
 $version = (Get-Content -Raw package.json | ConvertFrom-Json).version
 $installer = (Resolve-Path "release/NIP-Setup-$version-x64.exe").Path
 $uninstallRoot = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
-$existing = @(Get-ChildItem $uninstallRoot | Get-ItemProperty | Where-Object { $_.DisplayName -match '^NIP(?: \d.*)?$' })
+function Get-NipInstallations {
+    if (Test-Path -LiteralPath $uninstallRoot) {
+        Get-ChildItem $uninstallRoot | Get-ItemProperty | Where-Object { $_.DisplayName -match '^NIP(?: \d.*)?$' }
+    }
+}
+$existing = @(Get-NipInstallations)
 if ($existing.Count -gt 0) { throw 'NIP is already installed for this user; refusing to change it.' }
 foreach ($shortcut in @((Join-Path ([Environment]::GetFolderPath('Desktop')) 'NIP.lnk'), (Join-Path ([Environment]::GetFolderPath('Programs')) 'NIP.lnk'))) {
     if (Test-Path -LiteralPath $shortcut) { throw "Existing shortcut: $shortcut; refusing to replace it." }
@@ -23,7 +28,7 @@ try {
     $exe = Join-Path $installDir 'NIP.exe'
     if (-not (Test-Path -LiteralPath $exe)) { throw 'Installed executable missing' }
     if (-not (Test-Path -LiteralPath (Join-Path $installDir 'Uninstall NIP.exe'))) { throw 'Installed uninstaller missing' }
-    $entries = @(Get-ChildItem $uninstallRoot | Get-ItemProperty | Where-Object { $_.DisplayName -match '^NIP(?: \d.*)?$' })
+    $entries = @(Get-NipInstallations)
     if ($entries.Count -ne 1) { throw 'Expected one per-user uninstall entry' }
     if (-not (Test-Path -LiteralPath $desktopLink)) { throw 'Desktop shortcut missing' }
     if (-not (Test-Path -LiteralPath $startLink)) { throw 'Start menu shortcut missing' }
@@ -41,7 +46,7 @@ try {
         $deadline = (Get-Date).AddSeconds(40)
         while ((Test-Path -LiteralPath (Join-Path $installDir 'NIP.exe')) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 250 }
         if (Test-Path -LiteralPath (Join-Path $installDir 'NIP.exe')) { throw 'Uninstaller left the executable behind' }
-        $remaining = @(Get-ChildItem $uninstallRoot | Get-ItemProperty | Where-Object { $_.DisplayName -match '^NIP(?: \d.*)?$' })
+        $remaining = @(Get-NipInstallations)
         if ($remaining.Count -ne 0) { throw 'Uninstall entry was not removed' }
         if ((Test-Path -LiteralPath $desktopLink) -or (Test-Path -LiteralPath $startLink)) { throw 'Uninstaller left shortcuts behind' }
     } elseif (Test-Path -LiteralPath (Join-Path $installDir 'NIP.exe')) {
