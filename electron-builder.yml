@@ -1,0 +1,29 @@
+appId: com.santipk.nip
+productName: NIP
+asar: true
+directories:
+  output: release
+files:
+  - dist/**/*
+  - package.json
+  - LICENSE
+  - README.md
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: NIP-Setup-${version}-${arch}.${ext}
+  executableName: NIP
+  requestedExecutionLevel: asInvoker
+nsis:
+  oneClick: true
+  perMachine: false
+  allowElevation: false
+  runAfterFinish: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: NIP
+  uninstallDisplayName: NIP
+  deleteAppDataOnUninstall: false
+  license: LICENSE
+publish: null

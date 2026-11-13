@@ -2,7 +2,13 @@
 
 **name in progress**. Aplicación de escritorio para llamadas de amigos, con servidores que cada grupo aloja en su propio equipo. MVP para Windows x64: una sala de audio, invitaciones privadas y servidores recordados localmente.
 
-## Ejecutar
+## Descargar para Windows
+
+[Descargar el instalador Windows x64](https://github.com/santipk/nip/releases/latest). En Assets elegí `NIP-Setup-<version>-x64.exe`. No requiere Node.js ni permisos de administrador: ejecutá el instalador y abrí NIP desde Inicio o el escritorio. Para desinstalar: Configuración > Aplicaciones > NIP; los datos locales se conservan.
+
+**La primera distribución está sin firma Authenticode.** Windows/SmartScreen o el antivirus pueden advertirlo. SignPath Foundation es la opción elegida para solicitar firma; no hay aprobación ni certificado activo. Ver [Code signing policy](CODE_SIGNING.md). Cada release incluye un checksum SHA-256 para verificar integridad.
+
+## Ejecutar desde el código
 
 Requiere Node.js **22.12 o superior** y npm. Desde PowerShell:
 
@@ -64,12 +70,14 @@ npm test
 npm run test:e2e
 npm run package
 npm run test:package
+npm run dist:win
+npm run test:installer
 ```
 
 - `test`: pruebas del servidor real WSS, invitaciones inválidas, permiso incorrecto, pin incorrecto, participantes, enrutamiento autorizado y mensajes malformados.
 - `test:e2e`: abre dos procesos reales de Electron con perfiles aislados y dispositivos de medios sintéticos. Recorre crear/conectar, verifica que no haya solicitud de micrófono antes de Unirse, recibe RTP de audio en ambos extremos y comprueba energía de audio decodificado, silencio, salida/reentrada, persistencia cifrada, reconexión y pérdida del servidor. El audio entrante se silencia en el elemento de reproducción durante la prueba para no emitir los tonos por los parlantes. Capturas y perfiles de prueba quedan en `work/`, ignorado por Git. No se registran invitaciones en las salidas de prueba.
-- `package`: genera `release/NIP-win32-x64/NIP.exe` y sus archivos acompañantes. Copiá **toda la carpeta** para usar el portable. Sin firma de código ni instalador; no se publica ni despliega.
-- `test:package`: después de empaquetar, abre el ejecutable portable real, crea y detiene un servidor sin activar micrófono y comprueba que la interfaz funcione dentro del ASAR.
+- `package`: genera `release/win-unpacked/NIP.exe` y sus archivos acompañantes. Copiá **toda la carpeta** para usarla sin instalar. `dist:win` genera el instalador NSIS por usuario; `test:installer` valida instalación y desinstalación reales con perfil aislado. Ver [publicación y verificación](docs/RELEASING.md).
+- `test:package`: después de empaquetar, abre el ejecutable de distribución real, crea y detiene un servidor sin activar micrófono y comprueba que la interfaz funcione dentro del ASAR.
 
 **La prueba sintética no demuestra hablar/escuchar con micrófonos y parlantes físicos, ni conectividad entre dos máquinas o desde internet.** Esas verificaciones requieren prueba manual. Usá auriculares en la prueba real para evitar realimentación, comprobá ambos sentidos, silencio y cambio de dispositivos.
 

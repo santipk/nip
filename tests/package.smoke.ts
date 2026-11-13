@@ -4,10 +4,10 @@ import { mkdtemp, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import net from 'node:net';
 import { _electron as electron } from 'playwright';
-test('portable Windows: abre la interfaz, aloja servidor real y lo detiene', { timeout: 60000 }, async t => {
-  await mkdir('work', { recursive: true }); const data = await mkdtemp(path.resolve('work/portable-'));
+test('distribución Windows: abre la interfaz, aloja servidor real y lo detiene', { timeout: 60000 }, async t => {
+  await mkdir('work', { recursive: true }); const data = process.env.NIP_SMOKE_DATA_DIR || await mkdtemp(path.resolve('work/package-'));
   const env = Object.fromEntries(Object.entries(process.env).filter(([k, v]) => k !== 'ELECTRON_RUN_AS_NODE' && k !== 'NIP_TEST' && v !== undefined)) as Record<string, string>;
-  const app = await electron.launch({ executablePath: path.resolve('release/NIP-win32-x64/NIP.exe'), args: [], env: { ...env, NIP_DATA_DIR: data } });
+  const app = await electron.launch({ executablePath: path.resolve(process.env.NIP_EXECUTABLE || 'release/win-unpacked/NIP.exe'), args: [], env: { ...env, NIP_DATA_DIR: data } });
   t.after(() => app.close());
   const page = await app.firstWindow(); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.waitForSelector('#create-open'); assert.equal(await page.title(), 'NIP');
