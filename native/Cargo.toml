@@ -27,3 +27,10 @@ windows-sys = { version = "0.61", features = ["Win32_Security_Cryptography", "Wi
 [profile.release]
 lto = "thin"
 strip = true
+
+# opusic-sys configures Release CMake definitions; MSVC Debug configuration mismatches
+# its generated SIMD declarations. Keep only this C dependency optimized in dev.
+[profile.dev.package.opusic-sys]
+opt-level = 3
+debug = false
+debug-assertions = false
