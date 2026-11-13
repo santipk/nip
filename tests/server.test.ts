@@ -1,0 +1,60 @@
+import { test, before } from 'node:test';
+import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { newIdentity, startServer, fingerprint, type Identity } from '../src/server';
+import { connect } from '../src/client';
+import { parseInvitation, encodeInvitation } from '../src/invitation';
+import type { Invitation, ServerEvent } from '../src/shared';
+import { WebSocket } from 'ws';
+import https from 'node:https';
+let identity: Identity;
+before(async () => { identity = await newIdentity(); });
+const pause = (ms: number) => new Promise(r => setTimeout(r, ms));
+test('invitación: valida dirección y permiso; rechaza credenciales en URL, texto y protocolos ajenos', () => {
+  const invite: Invitation = { endpoint: 'wss://127.0.0.1:45454', token: identity.token, fingerprint: fingerprint(identity.cert) };
+  const link = encodeInvitation(invite);
+  assert.deepEqual(parseInvitation(link), invite);
+  for (const value of ['no es un enlace', 'https://ejemplo.org', 'nip://join#abc', encodeInvitation({ ...invite, endpoint: 'ws://localhost:1' }), encodeInvitation({ ...invite, endpoint: 'wss://user:secret@localhost:1' }), encodeInvitation({ ...invite, endpoint: 'wss://localhost:1/?token=secret' })]) assert.throws(() => parseInvitation(value), /inválido/);
+});
+test('dos clientes autenticados: sala, señalización autorizada, salida y cierre del servidor', async t => {
+  const server = await startServer('Prueba NIP', 0, identity, '127.0.0.1');
+  t.after(() => server.stop());
+  const invite = { endpoint: `wss://127.0.0.1:${server.info.port}`, token: identity.token, fingerprint: fingerprint(identity.cert) };
+  const aEvents: ServerEvent[] = [], bEvents: ServerEvent[] = [];
+  const a = await connect(invite, 'Ana', e => aEvents.push(e)); t.after(() => a.close());
+  const b = await connect(invite, 'Bruno', e => bEvents.push(e)); t.after(() => b.close());
+  assert.equal(b.members.length, 2); assert.ok(b.members.every(m => !m.calling));
+  a.send({ type: 'signal', to: b.self, description: { type: 'offer', sdp: 'ignored' } });
+  await pause(80); assert.equal(bEvents.filter(e => e.type === 'signal').length, 0);
+  a.send({ type: 'call', active: true, muted: false }); b.send({ type: 'call', active: true, muted: true });
+  await pause(80);
+  a.send({ type: 'signal', to: b.self, description: { type: 'offer', sdp: 'test-sdp' } });
+  await pause(80);
+  assert.deepEqual(bEvents.find(e => e.type === 'signal'), { type: 'signal', from: a.self, description: { type: 'offer', sdp: 'test-sdp' } });
+  const roster = aEvents.filter(e => e.type === 'members').at(-1)!;
+  assert.equal(roster.type, 'members'); if (roster.type === 'members') assert.equal(roster.members.find(m => m.id === b.self)?.muted, true);
+  b.close(); await pause(80);
+  const last = aEvents.filter(e => e.type === 'members').at(-1)!;
+  if (last.type === 'members') assert.equal(last.members.length, 1);
+});
+test('un permiso incorrecto no obtiene acceso', async t => {
+  const server = await startServer('Privado', 0, identity, '127.0.0.1'); t.after(() => server.stop());
+  await assert.rejects(connect({ endpoint: `wss://127.0.0.1:${server.info.port}`, token: 'x'.repeat(43), fingerprint: fingerprint(identity.cert) }, 'Intruso', () => {}), /Permiso de invitación rechazado/);
+});
+test('el pin incorrecto se rechaza antes del upgrade y de enviar el token', async t => {
+  let requests = 0, upgrades = 0;
+  const server = https.createServer({ key: identity.private, cert: identity.cert }, (_req, res) => { requests++; res.end(); });
+  server.on('upgrade', (_req, socket) => { upgrades++; socket.destroy(); });
+  await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise<void>(r => server.close(() => r())));
+  const port = (server.address() as import('node:net').AddressInfo).port;
+  await assert.rejects(connect({ endpoint: `wss://127.0.0.1:${port}`, token: identity.token, fingerprint: '0'.repeat(64) }, 'Ana', () => {}), /identidad/);
+  assert.equal(upgrades, 0); assert.equal(requests, 0);
+});
+test('mensajes malformados cierran la conexión sin tumbar el servidor', async t => {
+  const server = await startServer('Formato', 0, identity, '127.0.0.1'); t.after(() => server.stop());
+  const url = `wss://127.0.0.1:${server.info.port}`;
+  const ws = new WebSocket(url, { rejectUnauthorized: false }); t.after(() => ws.terminate());
+  await once(ws, 'open'); ws.send('{broken'); const [code] = await once(ws, 'close'); assert.equal(code, 1008);
+  const c = await connect({ endpoint: url, token: identity.token, fingerprint: fingerprint(identity.cert) }, 'Válido', () => {}); c.close();
+});

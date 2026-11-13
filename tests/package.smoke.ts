@@ -1,0 +1,20 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir } from 'node:fs/promises';
+import path from 'node:path';
+import net from 'node:net';
+import { _electron as electron } from 'playwright';
+test('portable Windows: abre la interfaz, aloja servidor real y lo detiene', { timeout: 60000 }, async t => {
+  await mkdir('work', { recursive: true }); const data = await mkdtemp(path.resolve('work/portable-'));
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k, v]) => k !== 'ELECTRON_RUN_AS_NODE' && k !== 'NIP_TEST' && v !== undefined)) as Record<string, string>;
+  const app = await electron.launch({ executablePath: path.resolve('release/NIP-win32-x64/NIP.exe'), args: [], env: { ...env, NIP_DATA_DIR: data } });
+  t.after(() => app.close());
+  const page = await app.firstWindow(); const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await page.waitForSelector('#create-open'); assert.equal(await page.title(), 'NIP');
+  await page.screenshot({ path: 'work/home.png', fullPage: true });
+  const probe = net.createServer(); await new Promise<void>(r => probe.listen(0, '127.0.0.1', r)); const port = (probe.address() as net.AddressInfo).port; await new Promise<void>(r => probe.close(() => r()));
+  await page.locator('#create-open').click(); await page.locator('#create-name').fill('Los amigos'); await page.locator('#create-form details summary').click(); await page.locator('#create-port').fill(String(port)); await page.locator('#create-submit').click();
+  await page.waitForSelector('#room-screen:not([hidden])'); assert.match(await page.locator('#server-status').innerText(), /internet sin verificar/);
+  assert.equal(await page.locator('#join').isVisible(), true); assert.equal(await page.locator('#remote-audio audio').count(), 0);
+  await page.locator('#stop').click(); await page.waitForSelector('#home-screen:not([hidden])'); assert.deepEqual(errors, []);
+});

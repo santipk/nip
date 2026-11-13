@@ -1,0 +1,21 @@
+node_modules/
+dist/
+release/
+test-results/
+playwright-report/
+work/
+*.log
+
+# Local configuration, credentials and Electron profiles
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.bin*
+profile.json
+userData/
+profiles/
+.scratch/
