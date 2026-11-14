@@ -18,6 +18,9 @@ use tokio::{
 };
 
 const MAX_FRAME: usize = 65536;
+trait WireMessage: Serialize + serde::de::DeserializeOwned {
+    const MAX_BYTES: usize;
+}
 #[derive(Serialize, Deserialize)]
 enum Request {
     Authenticate { token: Vec<u8>, name: String },
@@ -31,12 +34,19 @@ enum Response {
     Chat(ChatMessage),
     Error(String),
 }
-async fn write_frame<T: Serialize>(
+impl WireMessage for Request {
+    const MAX_BYTES: usize = MAX_FRAME;
+}
+impl WireMessage for Response {
+    // Welcome carries 100 messages. JSON can encode one character as six bytes.
+    const MAX_BYTES: usize = 2 * 1024 * 1024;
+}
+async fn write_frame<T: WireMessage>(
     stream: &mut quinn::SendStream,
     value: &T,
 ) -> Result<(), String> {
     let bytes = serde_json::to_vec(value).map_err(|_| "Mensaje inválido")?;
-    if bytes.len() > MAX_FRAME {
+    if bytes.len() > T::MAX_BYTES {
         return Err("Mensaje demasiado grande".into());
     }
     stream
@@ -49,11 +59,9 @@ async fn write_frame<T: Serialize>(
         .map_err(|_| "Conexión cerrada")?;
     Ok(())
 }
-async fn read_frame<T: serde::de::DeserializeOwned>(
-    stream: &mut quinn::RecvStream,
-) -> Result<T, String> {
+async fn read_frame<T: WireMessage>(stream: &mut quinn::RecvStream) -> Result<T, String> {
     let len = stream.read_u32().await.map_err(|_| "Conexión cerrada")? as usize;
-    if len == 0 || len > MAX_FRAME {
+    if len == 0 || len > T::MAX_BYTES {
         return Err("Tamaño de mensaje inválido".into());
     }
     let mut bytes = vec![0; len];
@@ -295,6 +303,7 @@ struct Client {
     connection: quinn::Connection,
     requests: mpsc::Sender<Request>,
     task: tokio::task::JoinHandle<()>,
+    activation: Option<tokio::sync::oneshot::Sender<()>>,
 }
 impl Drop for Client {
     fn drop(&mut self) {
@@ -382,7 +391,12 @@ impl Client {
                 }
             }
         });
+        let (activation, activated) = tokio::sync::oneshot::channel();
         let task = tokio::spawn(async move {
+            if activated.await.is_err() {
+                read_task.abort();
+                return;
+            }
             loop {
                 tokio::select! {
                     request = outgoing.recv() => { let Some(request) = request else { break; }; if write_frame(&mut send, &request).await.is_err() { break; } }
@@ -399,6 +413,7 @@ impl Client {
                 connection,
                 requests,
                 task,
+                activation: Some(activation),
             },
             room,
         ))
@@ -407,6 +422,30 @@ impl Client {
         self.requests
             .try_send(request)
             .map_err(|_| "La conexión está ocupada o cerrada".into())
+    }
+}
+
+struct PendingConnection {
+    task: tokio::task::JoinHandle<Result<(Client, Room), String>>,
+    invitation: Option<Invitation>,
+    host: Option<(Host, HostInfo)>,
+}
+impl Drop for PendingConnection {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+fn connect_pending(
+    invitation: Invitation,
+    user: String,
+    updates: mpsc::Sender<(usize, Payload)>,
+    audio: AudioHandle,
+) -> PendingConnection {
+    let saved = invitation.clone();
+    PendingConnection {
+        task: tokio::spawn(async move { Client::connect(&invitation, user, updates, audio).await }),
+        invitation: Some(saved),
+        host: None,
     }
 }
 
@@ -426,6 +465,7 @@ pub fn spawn(
             let _ = events.send(Event::State(state.clone()));
             let (updates, mut received) = mpsc::channel(128);
             let mut host: Option<Host> = None; let mut client: Option<Client> = None;
+            let mut pending: Option<PendingConnection> = None;
             let mut status_tick = tokio::time::interval(Duration::from_millis(100)); let mut last_presence = None;
             loop {
                 tokio::select! {
@@ -438,32 +478,43 @@ pub fn spawn(
                                 if host.is_some() { return Err("Detené el anfitrión actual antes de crear otro".into()); }
                                 let identity = store.host(&name)?; let created = Host::start(identity, ([0,0,0,0],port).into())?;
                                 let invitation = created.invitation(format!("127.0.0.1:{port}"))?;
-                                let (connected, room) = Client::connect(&invitation, user, updates.clone(), audio.clone()).await?;
-                                disconnect(&mut client, &mut state, &audio); client = Some(connected); state.room = Some(room); last_presence = None;
-                                state.host = Some(HostInfo {name, port, addresses: local_addresses(port)}); host = Some(created);
+                                let mut attempt = connect_pending(invitation, user, updates.clone(), audio.clone());
+                                attempt.invitation = None;
+                                attempt.host = Some((created, HostInfo {name, port, addresses: local_addresses(port)}));
+                                pending = Some(attempt);
                             }
                             Command::Connect { invitation, user } => {
                                 let invitation = Invitation::parse(&invitation)?;
-                                let (connected, room) = Client::connect(&invitation, user, updates.clone(), audio.clone()).await?;
-                                store.remember(room.name.clone(), invitation)?;
-                                disconnect(&mut client, &mut state, &audio); client = Some(connected); state.room = Some(room); last_presence = None; state.saved = store.saved();
+                                pending = Some(connect_pending(invitation, user, updates.clone(), audio.clone()));
                             }
                             Command::Reconnect { id, user } => {
                                 let invitation = store.invitation(&id).ok_or("Servidor guardado inexistente")?;
-                                let (connected, room) = Client::connect(&invitation, user, updates.clone(), audio.clone()).await?;
-                                disconnect(&mut client, &mut state, &audio); client = Some(connected); state.room = Some(room); last_presence = None;
+                                pending = Some(connect_pending(invitation, user, updates.clone(), audio.clone()));
                             }
                             Command::Invite { endpoint } => {
                                 let invite = host.as_ref().ok_or("Primero creá un grupo")?.invitation(endpoint)?;
                                 let _ = events.send(Event::Invitation(invite.encode()?));
                             }
                             Command::Chat(text) => { client.as_ref().ok_or("Conectate a un grupo para enviar mensajes")?.request(Request::Chat(text))?; }
-                            Command::Disconnect => { disconnect(&mut client, &mut state, &audio); }
-                            Command::StopHost => { disconnect(&mut client, &mut state, &audio); host = None; state.host = None; }
+                            Command::Disconnect => { pending = None; disconnect(&mut client, &mut state, &audio); }
+                            Command::StopHost => { pending = None; disconnect(&mut client, &mut state, &audio); host = None; state.host = None; }
                             Command::AudioSettings(settings) => { audio.command(Command::AudioSettings(settings.clone()))?; store.save_audio(settings)?; }
                             Command::Shutdown => { disconnect(&mut client, &mut state, &audio); let _ = audio.command(Command::Shutdown); return Ok(()); }
                             command => { if matches!(command, Command::Join) && client.is_none() { return Err("Conectate a un grupo antes de entrar a la llamada".into()); } audio.command(command)?; }
                         }; Ok(()) }.await;
+                        if let Err(error) = result { let _ = events.send(Event::Error(error)); }
+                        let _ = events.send(Event::State(state.clone()));
+                    }
+                    result = async { (&mut pending.as_mut().unwrap().task).await }, if pending.is_some() => {
+                        let mut attempt = pending.take().unwrap();
+                        let result = result.map_err(|_| "La conexión se interrumpió".to_string()).and_then(|r| r).and_then(|(mut connected, room)| {
+                            if let Some(invitation) = attempt.invitation.take() { store.remember(room.name.clone(), invitation)?; }
+                            disconnect(&mut client, &mut state, &audio);
+                            if let Some(activation) = connected.activation.take() { let _ = activation.send(()); }
+                            client = Some(connected); state.room = Some(room); last_presence = None; state.saved = store.saved();
+                            if let Some((created, info)) = attempt.host.take() { host = Some(created); state.host = Some(info); }
+                            Ok(())
+                        });
                         if let Err(error) = result { let _ = events.send(Event::Error(error)); }
                         let _ = events.send(Event::State(state.clone()));
                     }
@@ -478,7 +529,7 @@ pub fn spawn(
                     _ = status_tick.tick() => { let status = audio.status(); let presence = (status.calling, status.muted || status.deafened || status.testing); if last_presence != Some(presence) { if let Some(client) = &client { if client.request(Request::Presence {calling: presence.0, muted: presence.1}).is_ok() { last_presence = Some(presence); } } } }
                 }
             }
-            drop(client); drop(host); let _ = audio.command(Command::Shutdown);
+            drop(pending); drop(client); drop(host); let _ = audio.command(Command::Shutdown);
         });
     }).expect("crear hilo de red");
     commands
@@ -754,18 +805,19 @@ mod tests {
     #[tokio::test]
     async fn newcomer_receives_only_last_hundred_session_messages() {
         let (_host, invite) = start();
+        let text = |person, message| format!("{person}:{message}{}", "\u{0000}".repeat(1990));
         let mut peers = Vec::new();
         for person in 0..21 {
             let (e, c, mut send, mut recv, room) =
                 authenticated(&invite, &format!("Persona{person}")).await;
             for message in 0..5 {
-                write_frame(&mut send, &Request::Chat(format!("{person}:{message}")))
+                write_frame(&mut send, &Request::Chat(text(person, message)))
                     .await
                     .unwrap();
             }
             loop {
                 let message = next_chat(&mut recv).await;
-                if message.sender_id == room.self_id && message.text == format!("{person}:4") {
+                if message.sender_id == room.self_id && message.text == text(person, 4) {
                     break;
                 }
             }
@@ -773,7 +825,39 @@ mod tests {
         }
         let (_e, _c, _s, _r, room) = authenticated(&invite, "Nueva").await;
         assert_eq!(room.history.len(), 100);
-        assert_eq!(room.history.first().unwrap().text, "1:0");
-        assert_eq!(room.history.last().unwrap().text, "20:4");
+        assert_eq!(room.history.first().unwrap().text, text(1, 0));
+        assert_eq!(room.history.last().unwrap().text, text(20, 4));
+    }
+    #[tokio::test]
+    async fn pending_client_preserves_messages_until_adopted() {
+        let (_host, invite) = start();
+        let (events, _) = std::sync::mpsc::channel();
+        let (audio, _frames) =
+            crate::audio::AudioEngine::spawn_synthetic(events, Default::default()).unwrap();
+        let (updates, mut received) = mpsc::channel(128);
+        let (mut client, _) = Client::connect(&invite, "Nueva".into(), updates, audio)
+            .await
+            .unwrap();
+        let (_e, _c, mut send, mut recv, _) = authenticated(&invite, "Ana").await;
+        write_frame(&mut send, &Request::Chat("Durante bienvenida".into()))
+            .await
+            .unwrap();
+        next_chat(&mut recv).await;
+        assert!(
+            tokio::time::timeout(Duration::from_millis(100), received.recv())
+                .await
+                .is_err()
+        );
+        client.activation.take().unwrap().send(()).unwrap();
+        loop {
+            let (_, update) = tokio::time::timeout(Duration::from_secs(2), received.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            if let Payload::Response(Response::Chat(message)) = update {
+                assert_eq!(message.text, "Durante bienvenida");
+                break;
+            }
+        }
     }
 }

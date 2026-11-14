@@ -4,6 +4,8 @@ version = "0.2.0"
 edition = "2024"
 license = "MIT"
 publish = false
+authors = ["Santiago Abregu"]
+description = "NIP — llamadas y chat de amigos con servidores autohospedados"
 
 [dependencies]
 eframe = { version = "=0.37.0", default-features = false, features = ["default_fonts", "glow", "accesskit"] }
@@ -34,3 +36,6 @@ strip = true
 opt-level = 3
 debug = false
 debug-assertions = false
+
+[build-dependencies]
+winres = "=0.1.12"

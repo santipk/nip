@@ -53,7 +53,8 @@ pub struct NipApp {
     host_open: bool,
     connect_open: bool,
     invite_open: bool,
-    help: Option<(&'static str, &'static str)>,
+    help: Option<egui::Id>,
+    help_dismissed: Option<egui::Id>,
     busy: bool,
     test_pending: bool,
     pub quit_at: Option<Instant>,
@@ -80,6 +81,7 @@ impl NipApp {
             connect_open: false,
             invite_open: false,
             help: None,
+            help_dismissed: None,
             busy: false,
             test_pending: false,
             quit_at: None,
@@ -162,11 +164,13 @@ impl NipApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
         // A quiet idle window repaints only to receive background state, never to capture audio.
-        ctx.request_repaint_after(Duration::from_millis(if self.audio.testing {
-            50
-        } else {
-            200
-        }));
+        ctx.request_repaint_after(Duration::from_millis(
+            if self.audio.testing || self.audio.calling {
+                100
+            } else {
+                200
+            },
+        ));
         egui::Panel::left("servers")
             .exact_size(232.0)
             .resizable(false)
@@ -306,16 +310,13 @@ impl NipApp {
             {
                 self.command(Command::Join);
             }
-            if icon_button(
-                ui,
-                Icon::Mic,
-                if self.audio.muted {
-                    "Activar micrófono"
-                } else {
-                    "Silenciar micrófono"
-                },
-                self.audio.muted,
-            )
+            if ui.add_enabled_ui(!self.audio.testing && !self.audio.deafened && !self.test_pending, |ui| {
+                icon_button(ui, Icon::Mic, if self.audio.muted { "Activar micrófono" } else { "Silenciar micrófono" }, self.audio.muted)
+            }).inner.on_disabled_hover_text(if self.audio.deafened {
+                "Desactivá Ensordecer para cambiar el micrófono."
+            } else {
+                "Detené la prueba privada para cambiar el micrófono. Tu voz no se envía al grupo."
+            })
             .clicked()
             {
                 self.command(Command::Mute);
@@ -417,16 +418,44 @@ impl NipApp {
         );
     }
 
-    fn help_button(&mut self, ui: &mut egui::Ui, title: &'static str, text: &'static str) {
-        let response = ui.button("i").on_hover_text(text);
-        if response.has_focus() {
-            egui::Tooltip::for_widget(&response).show(|ui| {
-                ui.label(text);
-            });
+    fn help_button(
+        &mut self,
+        ui: &mut egui::Ui,
+        title: &'static str,
+        text: &'static str,
+    ) -> egui::Response {
+        let response = ui.push_id(title, |ui| ui.button("i")).inner;
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::Role::Button, true, format!("Ayuda: {title}"))
+        });
+        let id = response.id;
+        if !response.hovered() && !response.has_focus() && self.help_dismissed == Some(id) {
+            self.help_dismissed = None;
         }
         if response.clicked() {
-            self.help = Some((title, text));
+            if self.help == Some(id) {
+                self.help = None;
+                self.help_dismissed = Some(id);
+            } else {
+                self.help = Some(id);
+                self.help_dismissed = None;
+            }
         }
+        let mut open = self.help == Some(id)
+            || (self.help_dismissed != Some(id) && (response.hovered() || response.has_focus()));
+        let was_open = open;
+        egui::Popup::from_response(&response)
+            .open_bool(&mut open)
+            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+            .show(|ui| {
+                ui.set_max_width(320.0);
+                ui.label(text);
+            });
+        if was_open && !open {
+            self.help = None;
+            self.help_dismissed = Some(id);
+        }
+        response
     }
     fn settings(&mut self, ui: &mut egui::Ui) {
         ui.set_width(520.0);
@@ -472,7 +501,7 @@ impl NipApp {
                 } else {
                     "Nivel del micrófono"
                 })
-                .desired_width(f32::INFINITY),
+                .desired_width(ui.available_width()),
         );
         ui.horizontal(|ui| {
             let label = if self.test_pending {
@@ -522,8 +551,10 @@ impl NipApp {
         if self.settings_open {
             let response = egui::Modal::new(egui::Id::unique("audio_settings"))
                 .show(ctx, |ui| self.settings(ui));
-            if response.should_close() && self.help.is_none() {
+            if response.should_close() {
                 self.settings_open = false;
+                self.help = None;
+                self.help_dismissed = None;
             }
             if !self.settings_open && (self.audio.testing || self.test_pending) {
                 self.command(Command::StopTest);
@@ -644,22 +675,28 @@ impl NipApp {
                 self.invitation_result = None;
             }
         }
-        if let Some((title, text)) = self.help {
-            let response = egui::Modal::new(egui::Id::unique("setting_help")).show(ctx, |ui| {
-                ui.set_width(360.0);
-                ui.heading(title);
-                ui.label(text);
-                if ui.button("Entendido").clicked() {
-                    self.help = None;
-                }
-            });
-            if response.should_close() {
-                self.help = None;
-            }
-        }
     }
 }
 impl eframe::App for NipApp {
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // eframe runs logic while hidden, so background audio events cannot accumulate
+        // for the entire time the window is minimized.
+        self.poll();
+        if self
+            .quit_at
+            .is_some_and(|deadline| Instant::now() >= deadline)
+        {
+            self.command(Command::Shutdown);
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+        ctx.request_repaint_after(Duration::from_millis(
+            if self.audio.testing || self.audio.calling {
+                100
+            } else {
+                200
+            },
+        ));
+    }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.render(ui);
     }
@@ -685,8 +722,23 @@ fn icon_button(ui: &mut egui::Ui, icon: Icon, label: &str, selected: bool) -> eg
             .selected(selected),
     );
     let rect = response.rect;
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
-    let stroke = Stroke::new(1.7, if selected { ACCENT } else { TEXT });
+    response.widget_info(|| {
+        if matches!(icon, Icon::Settings) {
+            egui::WidgetInfo::labeled(egui::Role::Button, response.enabled(), label)
+        } else {
+            egui::WidgetInfo::selected(egui::Role::Button, response.enabled(), selected, label)
+        }
+    });
+    let stroke = Stroke::new(
+        1.7,
+        if !response.enabled() {
+            SECONDARY
+        } else if selected {
+            ACCENT
+        } else {
+            TEXT
+        },
+    );
     let painter = ui.painter_at(rect);
     let center = rect.center();
     if response.hovered() || response.has_focus() || selected {
@@ -781,6 +833,170 @@ fn icon_button(ui: &mut egui::Ui, icon: Icon, label: &str, selected: bool) -> eg
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn audio_dialog_is_painted_inside_the_viewport() {
+        let (commands, _) = tokio::sync::mpsc::unbounded_channel();
+        let (_, events) = std::sync::mpsc::channel();
+        let mut app = NipApp::new(commands, events);
+        app.settings_open = true;
+        let ctx = egui::Context::default();
+        configure(&ctx);
+        let viewport = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1080.0, 720.0));
+        for _ in 0..3 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(viewport),
+                    ..Default::default()
+                },
+                |ui| app.render(ui),
+            );
+            let title = output.shapes.iter().find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.job.text == "Audio" => {
+                    Some((shape.clip_rect, text.visual_bounding_rect()))
+                }
+                _ => None,
+            });
+            output.textures_delta.clear();
+            if let Some((clip, text)) = title {
+                assert!(
+                    viewport.intersects(text) && clip.intersects(text),
+                    "dialog title outside visible area: {text:?}, clip {clip:?}"
+                );
+                return;
+            }
+        }
+        panic!("audio dialog has no painted title");
+    }
+    fn help_frame(
+        app: &mut NipApp,
+        ctx: &egui::Context,
+        input: egui::RawInput,
+    ) -> (egui::Response, bool) {
+        let mut response = None;
+        let mut output = ctx.run_ui(input, |ui| {
+            response = Some(app.help_button(ui, "Entrada", "Ayuda de entrada compartida"));
+            let _ = ui.button("Otro ajuste");
+        });
+        let shown = output.shapes.iter().any(|shape| matches!(&shape.shape, egui::Shape::Text(text) if text.galley.job.text == "Ayuda de entrada compartida"));
+        output.textures_delta.clear();
+        (response.unwrap(), shown)
+    }
+    fn key_input(key: egui::Key) -> egui::RawInput {
+        let mut input = egui::RawInput::default();
+        input.events.push(egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Default::default(),
+        });
+        input
+    }
+    fn pointer_input(position: egui::Pos2, pressed: Option<bool>) -> egui::RawInput {
+        let mut input = egui::RawInput::default();
+        input.events.push(egui::Event::PointerMoved(position));
+        if let Some(pressed) = pressed {
+            input.events.push(egui::Event::PointerButton {
+                pos: position,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: Default::default(),
+            });
+        }
+        input
+    }
+    #[test]
+    fn same_anchored_help_supports_hover_tab_click_escape_and_outside_click() {
+        let (commands, _) = tokio::sync::mpsc::unbounded_channel();
+        let (_, events) = std::sync::mpsc::channel();
+        let mut app = NipApp::new(commands, events);
+        let ctx = egui::Context::default();
+        configure(&ctx);
+        let (button, _) = help_frame(&mut app, &ctx, Default::default());
+        help_frame(&mut app, &ctx, pointer_input(button.rect.center(), None));
+        assert!(help_frame(&mut app, &ctx, Default::default()).1);
+        help_frame(
+            &mut app,
+            &ctx,
+            pointer_input(egui::pos2(600.0, 400.0), None),
+        );
+        assert!(!help_frame(&mut app, &ctx, Default::default()).1);
+        help_frame(&mut app, &ctx, key_input(egui::Key::Tab));
+        let (focused, shown) = help_frame(&mut app, &ctx, Default::default());
+        assert!(focused.has_focus() && shown);
+        help_frame(&mut app, &ctx, key_input(egui::Key::Escape));
+        assert!(!help_frame(&mut app, &ctx, Default::default()).1);
+        help_frame(
+            &mut app,
+            &ctx,
+            pointer_input(button.rect.center(), Some(true)),
+        );
+        help_frame(
+            &mut app,
+            &ctx,
+            pointer_input(button.rect.center(), Some(false)),
+        );
+        help_frame(
+            &mut app,
+            &ctx,
+            pointer_input(egui::pos2(600.0, 400.0), None),
+        );
+        assert!(
+            help_frame(&mut app, &ctx, Default::default()).1,
+            "clic fija la misma ayuda al apartar el puntero"
+        );
+        help_frame(
+            &mut app,
+            &ctx,
+            pointer_input(egui::pos2(600.0, 400.0), Some(true)),
+        );
+        help_frame(
+            &mut app,
+            &ctx,
+            pointer_input(egui::pos2(600.0, 400.0), Some(false)),
+        );
+        assert!(!help_frame(&mut app, &ctx, Default::default()).1);
+    }
+    #[test]
+    fn private_test_and_deafen_disable_mic_with_native_toggle_state() {
+        let (commands, mut received) = tokio::sync::mpsc::unbounded_channel();
+        let (_, events) = std::sync::mpsc::channel();
+        let mut app = NipApp::new(commands, events);
+        let ctx = egui::Context::default();
+        configure(&ctx);
+        ctx.enable_accesskit();
+        for (testing, deafened) in [(true, false), (false, true)] {
+            app.audio.testing = testing;
+            app.audio.deafened = deafened;
+            app.audio.muted = true;
+            let mut output = ctx.run_ui(Default::default(), |ui| app.voice_bar(ui));
+            let tree = output.platform_output.accesskit_update.as_ref().unwrap();
+            let mic = tree
+                .nodes
+                .iter()
+                .find(|(_, node)| node.label() == Some("Activar micrófono"))
+                .map(|(_, node)| node)
+                .unwrap();
+            assert!(mic.is_disabled());
+            assert_eq!(mic.toggled(), Some(egui::accesskit::Toggled::True));
+            let bounds = mic.bounds().unwrap();
+            let position = egui::pos2(
+                ((bounds.x0 + bounds.x1) / 2.0) as f32,
+                ((bounds.y0 + bounds.y1) / 2.0) as f32,
+            );
+            output.textures_delta.clear();
+            for pressed in [true, false] {
+                let mut output = ctx.run_ui(pointer_input(position, Some(pressed)), |ui| {
+                    app.voice_bar(ui)
+                });
+                output.textures_delta.clear();
+            }
+            assert!(
+                received.try_recv().is_err(),
+                "el control deshabilitado no emite Mute ni reabre envío"
+            );
+        }
+    }
     #[test]
     fn keyboard_chat_and_disconnect_do_not_start_capture() {
         let (commands, mut received) = tokio::sync::mpsc::unbounded_channel();

@@ -2,6 +2,8 @@
 
 **name in progress**. Aplicación de escritorio para llamadas de amigos, con servidores que cada grupo aloja en su propio equipo. MVP para Windows x64: una sala de audio, invitaciones privadas y servidores recordados localmente.
 
+**Migración nativa en verificación:** la nueva implementación Rust funciona sin Chromium ni WebView e incorpora chat, ajustes de audio y prueba privada. Ver [ejecución nativa, protocolo y mediciones](docs/NATIVE.md). La descarga pública de abajo sigue siendo Electron v0.1.2 hasta terminar las verificaciones del instalador nativo.
+
 ## Descargar para Windows
 
 [Descargar el instalador Windows x64](https://github.com/santipk/nip/releases/latest). En Assets elegí `NIP-Setup-<version>-x64.exe`. No requiere Node.js ni permisos de administrador: ejecutá el instalador y abrí NIP desde Inicio o el escritorio. Para desinstalar: Configuración > Aplicaciones > NIP; los datos locales se conservan.

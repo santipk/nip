@@ -256,7 +256,7 @@ struct Hardware {
     _input: cpal::Stream,
     _output: cpal::Stream,
     capture: rtrb::Consumer<(f32, u64)>,
-    playback: rtrb::Producer<f32>,
+    playback: rtrb::Producer<(f32, u64)>,
 }
 struct Peer {
     decoder: opus::Decoder,
@@ -279,6 +279,7 @@ fn run(
     let mut tick = Instant::now();
     let mut packet = [0u8; 1200];
     let mut last_flags = 0;
+    let mut last_status_event = Instant::now();
     loop {
         if shared.failed.swap(false, Ordering::SeqCst) {
             hardware = None;
@@ -337,6 +338,23 @@ fn run(
                 while h.capture.pop().is_ok() {}
             }
             last_flags = flags & 15;
+        }
+        if flags & CAPTURE == 0 {
+            let mut c = shared.control.lock().unwrap();
+            if c.status.level != 0.0 {
+                c.status.level = 0.0;
+                let _ = shared.events.send(Event::Audio(c.status.clone()));
+            }
+            drop(c);
+            if shared.synthetic {
+                let mut metrics = shared.metrics.lock().unwrap();
+                metrics.active_capture = false;
+                metrics.input_rms = 0.0;
+                metrics.monitor_rms = 0.0;
+                metrics.remote_rms = 0.0;
+            }
+            thread::sleep(Duration::from_millis(20));
+            continue;
         }
         for _ in 0..64 {
             let Ok((id, bytes)) = incoming.try_recv() else {
@@ -439,7 +457,7 @@ fn run(
             if let Some(h) = &mut hardware {
                 if h.playback.slots() >= SAMPLES {
                     for x in playback {
-                        let _ = h.playback.push(x);
+                        let _ = h.playback.push((x, epoch));
                     }
                 }
             }
@@ -461,7 +479,10 @@ fn run(
             }
             let mut c = shared.control.lock().unwrap();
             c.status.level = level;
-            let _ = shared.events.send(Event::Audio(c.status.clone()));
+            if last_status_event.elapsed() >= Duration::from_millis(100) {
+                let _ = shared.events.send(Event::Audio(c.status.clone()));
+                last_status_event = Instant::now();
+            }
         }
         thread::sleep(Duration::from_millis(2));
     }
@@ -598,7 +619,7 @@ where
 fn output_stream<T>(
     device: &cpal::Device,
     config: cpal::StreamConfig,
-    mut sink: rtrb::Consumer<f32>,
+    mut sink: rtrb::Consumer<(f32, u64)>,
     shared: Arc<Shared>,
 ) -> Result<cpal::Stream, cpal::Error>
 where
@@ -609,10 +630,10 @@ where
     device.build_output_stream(
         config,
         move |data: &mut [T], _| {
-            let allowed = shared.flags.load(Ordering::Relaxed) & (RECEIVE | TEST) != 0;
             for frame in data.chunks_mut(channels) {
-                let value = sink.pop().unwrap_or(0.0);
-                frame.fill(T::from_sample(if allowed { value } else { 0.0 }));
+                let epoch = shared.flags.load(Ordering::SeqCst);
+                let value = playback_sample(sink.pop().ok(), epoch);
+                frame.fill(T::from_sample(value));
             }
         },
         move |_| {
@@ -623,10 +644,26 @@ where
     )
 }
 
+fn playback_sample(sample: Option<(f32, u64)>, epoch: u64) -> f32 {
+    match sample {
+        Some((value, produced)) if produced == epoch && epoch & (RECEIVE | TEST) != 0 => value,
+        _ => 0.0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::time::{Duration, Instant};
+    #[test]
+    fn playback_discards_samples_from_before_private_test_or_deafen() {
+        let remote = 16 | RECEIVE;
+        let test = 32 | TEST;
+        assert_eq!(playback_sample(Some((0.5, remote)), remote), 0.5);
+        assert_eq!(playback_sample(Some((0.5, remote)), test), 0.0);
+        assert_eq!(playback_sample(Some((0.5, test)), remote), 0.0);
+        assert_eq!(playback_sample(Some((0.5, remote)), 48), 0.0);
+    }
     fn engine() -> (AudioHandle, tokio::sync::mpsc::Receiver<Vec<u8>>) {
         let (events, _) = std::sync::mpsc::channel();
         AudioEngine::spawn_synthetic(events, AudioSettings::default()).unwrap()
@@ -799,5 +836,18 @@ mod tests {
             while packets.try_recv().is_ok() {}
             packets.is_closed()
         });
+    }
+    #[test]
+    fn idle_audio_emits_no_periodic_status_and_opens_no_capture() {
+        let (events, updates) = mpsc::channel();
+        let (audio, _) = AudioEngine::spawn_synthetic(events, AudioSettings::default()).unwrap();
+        updates.recv_timeout(Duration::from_secs(1)).unwrap();
+        std::thread::sleep(Duration::from_millis(80));
+        while updates.try_recv().is_ok() {}
+        assert!(updates.recv_timeout(Duration::from_millis(150)).is_err());
+        let metrics = audio.synthetic_metrics().unwrap();
+        assert!(!metrics.active_capture);
+        assert_eq!(metrics.captured_frames, 0);
+        audio.command(Command::Shutdown).unwrap();
     }
 }

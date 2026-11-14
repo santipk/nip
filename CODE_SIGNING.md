@@ -2,11 +2,11 @@
 
 ## Estado actual
 
-La distribución actual de NIP **no tiene firma Authenticode**. SignPath Foundation es la opción elegida para solicitar firma gratuita open source; no hay aprobación, certificado ni integración activa de firma. Windows/SmartScreen o el antivirus pueden mostrar advertencias. Una futura firma tampoco garantiza ausencia de advertencias.
+La distribución actual de NIP **no tiene firma Authenticode**. La solicitud a SignPath Foundation fue enviada y el formulario confirmó su recepción el 13 de noviembre de 2026 (hora de Argentina). La aprobación, el certificado y la integración de firma siguen pendientes. Windows/SmartScreen o el antivirus pueden mostrar advertencias. Una futura firma tampoco garantiza ausencia de advertencias.
 
 ## Responsables
 
-Autor, mantenedor, revisor y futuro aprobador de releases: [Santiago Abregu (`santipk`)](https://github.com/santipk), propietario del repositorio. Los cambios de terceros requieren revisión del mantenedor. Cada solicitud de firma deberá tener aprobación manual y todos los participantes deberán usar MFA en GitHub y SignPath. La activación de MFA y de la cuenta SignPath está pendiente de confirmación; esta política no declara que ya esté configurada.
+Autor, mantenedor, revisor y futuro aprobador de releases: [Santiago Abregu (`santipk`)](https://github.com/santipk), propietario del repositorio. Los cambios de terceros requieren revisión del mantenedor. Cada solicitud de firma deberá tener aprobación manual y todos los participantes deberán usar MFA en GitHub y SignPath. La configuración de la cuenta SignPath se verificará al habilitar la integración.
 
 ## Alcance de firma propuesto
 
@@ -16,7 +16,7 @@ Tras la aprobación se añadirá la atribución exigida: “Free code signing pr
 
 ## Privacidad
 
-NIP no implementa telemetría, analítica ni cuentas centrales. Sólo inicia conexiones de aplicación cuando el usuario crea o conecta un servidor y se une a una llamada. El anfitrión recibe IP, nombre visible, presencia y señalización; los participantes intercambian audio y datos de red mediante WebRTC. Ver [seguridad y datos](README.md#seguridad-y-datos) para límites y almacenamiento. Descargar de GitHub y solicitar firma a SignPath implica usar servicios externos con sus propias políticas: [GitHub](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement), [SignPath](https://about.signpath.io/privacy-policy).
+NIP no implementa telemetría, analítica ni cuentas centrales. Crear o conectar un servidor inicia conexiones de aplicación; unirse a una llamada habilita audio. El anfitrión recibe IP, nombre visible, presencia y mensajes. En Electron v0.1.2 coordina audio WebRTC directo. En la implementación Rust nativa retransmite también los paquetes Opus y puede escucharlos: el transporte está cifrado por salto, sin E2EE frente al anfitrión. Ver [transición nativa](docs/NATIVE.md) para límites y almacenamiento. Descargar de GitHub y solicitar firma a SignPath implica usar servicios externos con sus propias políticas: [GitHub](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement), [SignPath](https://about.signpath.io/privacy-policy).
 
 ## Proceso futuro
 
