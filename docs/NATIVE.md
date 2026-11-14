@@ -2,7 +2,7 @@
 
 Implementación Windows x64 en Rust: egui/eframe y AccessKit para la interfaz, CPAL/WASAPI para audio, Opus mono a 48 kHz y QUIC/TLS 1.3 con quinn/rustls. No incorpora Chromium ni WebView.
 
-La rama `codex/native-migration` está en verificación. La distribución pública Electron v0.1.2 sigue disponible; no se ha sustituido por una release nativa sin terminar de verificar.
+La distribución nativa 0.2.0 usa un protocolo nuevo y se instala junto a Electron v0.1.2. La implementación nativa y la versión anterior se conservan en el repositorio; no hay migración automática de perfiles.
 
 ## Desarrollo sin reinstalar
 
@@ -52,6 +52,8 @@ cd ..
 
 La prueba de extremo a extremo conecta dos clientes QUIC reales con fuente y salida de audio sintéticas. Verifica chat sin captura, audio decodificado, monitor sin publicación, entrada/salida de pares, mute/deafen/restauración, nivel, volumen y limpieza. La prueba de instalación ejecuta el binario instalado con un perfil aislado y comprueba retención de datos y conservación del ejecutable Electron existente.
 
+La verificación interactiva recorrió las ocho combinaciones de escritorio/Inicio/apertura. Se comprobaron existencia y destino de los accesos, presencia de la ventana cuando se solicita abrir y ausencia del proceso cuando se desmarca. Las instalaciones de prueba usan un registro y nombres independientes y se desinstalan al terminar.
+
 ## Medición local
 
 Muestra de 10 segundos por aplicación con perfil nuevo, ventana de inicio, sin servidor ni audio; tres segundos de estabilización. Equipo con seis procesadores lógicos. No es un benchmark de llamadas ni un promedio de múltiples ejecuciones.
@@ -59,10 +61,12 @@ Muestra de 10 segundos por aplicación con perfil nuevo, ventana de inicio, sin 
 | Métrica | Electron v0.1.2 | Rust nativo |
 |---|---:|---:|
 | Procesos | 6 | 1 |
-| Working set total | 586,41 MiB | 141,67 MiB |
-| Bytes privados totales | 227,81 MiB | 136,55 MiB |
-| CPU sobre un núcleo | 1,525% | 1,070% |
-| CPU sobre el equipo | 0,254% | 0,178% |
-| Primer handle de ventana | 517 ms | 389 ms |
+| Working set total | 507,08 MiB | 87,36 MiB |
+| Bytes privados totales | 242,19 MiB | 83,67 MiB |
+| CPU sobre un núcleo | 3,968% | 2,293% |
+| CPU sobre el equipo | 0,661% | 0,382% |
+| Primer handle de ventana | 571 ms | 459 ms |
 
 El working set sumado puede contar páginas compartidas varias veces. Los bytes privados se informan por separado. El arranque mide aparición del handle de ventana, no disponibilidad para interacción ni latencia de audio. Script reproducible: `scripts/benchmark-native.ps1`; resultado local completo: `work/native-benchmark.json`.
+
+La tabla corresponde a la última ejecución con el build final. Una muestra anterior dio 586,41 MiB de working set para Electron y 141,67 MiB para el nativo; las condiciones del escritorio y las cachés introducen variación. No se presenta una única muestra como garantía de consumo.

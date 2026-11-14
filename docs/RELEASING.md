@@ -1,3 +1,14 @@
+# Publicar el cliente nativo
+
+Requiere Windows x64, Rust/rustup, MSVC/Windows SDK, CMake y NSIS. Ejecutar desde `native/`: `cargo fmt --all -- --check` y `cargo test --release --locked`. Desde la raíz: `scripts/package-native.ps1 -TestBuild` y `scripts/test-native-installer.ps1 -TestBuild`. El build de prueba usa un producto y registro separados: nunca reemplazar una instalación real para verificar un instalador.
+
+Recorrer las ocho combinaciones de escritorio/Inicio/apertura en la pantalla final. Comprobar destino de ambos accesos y ejecución del binario instalado cuando se selecciona abrir. Desinstalar conserva el perfil y debe eliminar sólo los archivos y accesos del producto de prueba. La validación física de audio y WAN requiere equipos/redes reales; distinguirla de las pruebas sintéticas.
+
+El workflow `Native Windows` ejecuta las pruebas, empaqueta el binario, instala/abre/desinstala en un runner limpio y conserva EXE, checksum y avisos de dependencias. No publica automáticamente. Para publicar una versión, actualizar Cargo.toml/Cargo.lock, agregar notas en `docs/releases/native-v<version>.md`, revisar el resultado del workflow y crear el tag `native-v<version>`. Descargar el artefacto de la ejecución verificada y publicar sus archivos sin reconstruirlos localmente. La primera distribución nativa se marca prerelease. Verificar el checksum del archivo público después de subirlo.
+
+No hay autoactualizador. El instalador nativo usa su propio producto, registro, accesos y perfil; la versión Electron puede permanecer instalada. Firma pendiente: [Code signing policy](../CODE_SIGNING.md). No agregar una integración ficticia ni publicar como firmado un archivo sin Authenticode válido.
+
+## Proceso histórico de Electron v0.1.x
 # Releases Windows
 
 Requiere Windows x64, Node 22.12+ y npm. Ejecutar `npm ci`, `npm run typecheck`, `npm test`, `npm run dist:win` y `npm run test:installer`. Electron Builder genera `release/NIP-Setup-<version>-x64.exe` y la carpeta `release/win-unpacked/`. La configuración usa una lista explícita de archivos, ASAR y dependencias de producción; no incorpora perfiles, tests ni skills.
