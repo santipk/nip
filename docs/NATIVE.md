@@ -63,12 +63,14 @@ Muestra de 10 segundos por aplicación con perfil nuevo, ventana de inicio, sin 
 | Métrica | Electron v0.1.2 | Rust nativo |
 |---|---:|---:|
 | Procesos | 6 | 1 |
-| Working set total | 507,08 MiB | 87,36 MiB |
-| Bytes privados totales | 242,19 MiB | 83,67 MiB |
-| CPU sobre un núcleo | 3,968% | 2,293% |
-| CPU sobre el equipo | 0,661% | 0,382% |
-| Primer handle de ventana | 571 ms | 459 ms |
+| Working set total | 493,13 MiB | 86,52 MiB |
+| Bytes privados totales | 228,88 MiB | 83,96 MiB |
+| CPU sobre un núcleo | 0,000% | 0,766% |
+| CPU sobre el equipo | 0,000% | 0,128% |
+| Primer handle de ventana | 509 ms | 145 ms |
 
 El working set sumado puede contar páginas compartidas varias veces. Los bytes privados se informan por separado. El arranque mide aparición del handle de ventana, no disponibilidad para interacción ni latencia de audio. Script reproducible: `scripts/benchmark-native.ps1`; resultado local completo: `work/native-benchmark.json`.
 
 La tabla corresponde a la última ejecución con el build final. Una muestra anterior dio 586,41 MiB de working set para Electron y 141,67 MiB para el nativo; las condiciones del escritorio y las cachés introducen variación. No se presenta una única muestra como garantía de consumo.
+
+Durante la última muestra había un aviso de Windows Security en el escritorio. Las ventanas se midieron sin interacción; la oclusión puede cambiar su actividad. Las muestras no demuestran una reducción consistente de CPU. El ahorro observado aquí corresponde a memoria y tamaño de distribución; no se extrapola a llamadas ni a otros equipos.
