@@ -26,6 +26,12 @@ try {
     if ($setup.ExitCode -ne 0) { throw "Installer exit $($setup.ExitCode)" }
     $exe = Join-Path $installDir $exeName
     if (-not (Test-Path -LiteralPath $exe)) { throw 'Installed executable missing' }
+    if ($env:CI_SOFTWARE_OPENGL) {
+        if ($env:CI -ne 'true') { throw 'Software OpenGL injection is restricted to CI' }
+        foreach ($library in @('opengl32.dll', 'libgallium_wgl.dll')) {
+            Copy-Item -LiteralPath (Join-Path $env:CI_SOFTWARE_OPENGL $library) -Destination (Join-Path $installDir $library)
+        }
+    }
     if ((Get-ItemProperty -LiteralPath $reg).InstallLocation -ne $installDir) { throw 'Unexpected uninstall registration' }
     foreach ($link in $shortcuts) { if (Test-Path -LiteralPath $link) { throw 'Silent install must not create unchecked interactive shortcuts' } }
     $startupError = Join-Path $testRoot 'startup-stderr.txt'
@@ -33,7 +39,7 @@ try {
     $app = Start-Process -FilePath $exe -ArgumentList @('--data-dir', "`"$profile`"", '--quit-after', '4') -RedirectStandardError $startupError -RedirectStandardOutput $startupOutput -PassThru
     $deadline = (Get-Date).AddSeconds(20)
     do { Start-Sleep -Milliseconds 50; $app.Refresh() } while (-not $app.HasExited -and $app.MainWindowHandle -eq 0 -and (Get-Date) -lt $deadline)
-    if ($app.MainWindowHandle -eq 0) { throw 'Installed native app did not show a window' }
+    if ($app.MainWindowHandle -eq 0) { throw "Installed native app did not show a window: $([IO.File]::ReadAllText($startupError))" }
     if (-not $app.WaitForExit(15000)) { Stop-Process -Id $app.Id; throw 'Installed app did not honor bounded development run' }
     if ($app.ExitCode -ne 0) { throw "Installed app exit $($app.ExitCode): $([IO.File]::ReadAllText($startupError))" }
 } finally {

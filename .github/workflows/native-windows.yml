@@ -35,7 +35,22 @@ jobs:
         run: ./scripts/package-native.ps1
       - name: Install, launch, uninstall and retain profile
         shell: pwsh
-        run: ./scripts/test-native-installer.ps1
+        env:
+          GALLIUM_DRIVER: llvmpipe
+          LIBGL_ALWAYS_SOFTWARE: 'true'
+        run: |
+          # Hosted runners lack a desktop OpenGL driver. These DLLs are test-only,
+          # injected after installation; they are never packaged in the release.
+          $archive = Join-Path $env:RUNNER_TEMP 'mesa-ci.7z'
+          Invoke-WebRequest 'https://github.com/pal1000/mesa-dist-win/releases/download/26.2.6/mesa3d-26.2.6-release-mingw.7z' -OutFile $archive
+          $expected = 'da0f71d9181b672c1918f3c342f11118c687f6059a46b16502845160733cc388'
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Mesa checksum mismatch' }
+          $mesa = Join-Path $env:RUNNER_TEMP 'mesa-ci'
+          New-Item -ItemType Directory -Path $mesa -Force | Out-Null
+          tar -xf $archive -C $mesa x64/opengl32.dll x64/libgallium_wgl.dll
+          if ($LASTEXITCODE -ne 0) { throw 'Could not extract CI OpenGL driver' }
+          $env:CI_SOFTWARE_OPENGL = Join-Path $mesa 'x64'
+          ./scripts/test-native-installer.ps1
       - name: Signature status
         shell: pwsh
         run: Get-AuthenticodeSignature release/native/NIP-Native-Setup-*-x64.exe | Format-List Status,StatusMessage
