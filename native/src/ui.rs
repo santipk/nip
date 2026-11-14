@@ -162,7 +162,11 @@ impl NipApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
         // A quiet idle window repaints only to receive background state, never to capture audio.
-        ctx.request_repaint_after(Duration::from_millis(100));
+        ctx.request_repaint_after(Duration::from_millis(if self.audio.testing {
+            50
+        } else {
+            200
+        }));
         egui::Panel::left("servers")
             .exact_size(232.0)
             .resizable(false)
@@ -796,8 +800,10 @@ mod tests {
                 ..Default::default()
             }))
             .unwrap();
-        let output = ctx.run_ui(Default::default(), |ui| app.render(ui));
+        let mut output = ctx.run_ui(Default::default(), |ui| app.render(ui));
         assert!(!output.shapes.is_empty());
+        // Headless tests have no texture renderer; acknowledge deltas explicitly.
+        output.textures_delta.clear();
         assert!(
             received.try_recv().is_err(),
             "abrir una sala no inicia captura"
@@ -812,12 +818,14 @@ mod tests {
             repeat: false,
             modifiers: Default::default(),
         });
-        let _ = ctx.run_ui(input, |ui| app.render(ui));
+        let mut output = ctx.run_ui(input, |ui| app.render(ui));
+        output.textures_delta.clear();
         assert!(matches!(received.try_recv(), Ok(Command::Chat(text)) if text == "Hola al grupo"));
         events
             .send(Event::Disconnected("Servidor cerrado".into()))
             .unwrap();
-        let _ = ctx.run_ui(Default::default(), |ui| app.render(ui));
+        let mut output = ctx.run_ui(Default::default(), |ui| app.render(ui));
+        output.textures_delta.clear();
         app.draft = "No enviar".into();
         app.send_chat();
         assert!(received.try_recv().is_err());
