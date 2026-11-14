@@ -28,12 +28,14 @@ try {
     if (-not (Test-Path -LiteralPath $exe)) { throw 'Installed executable missing' }
     if ((Get-ItemProperty -LiteralPath $reg).InstallLocation -ne $installDir) { throw 'Unexpected uninstall registration' }
     foreach ($link in $shortcuts) { if (Test-Path -LiteralPath $link) { throw 'Silent install must not create unchecked interactive shortcuts' } }
-    $app = Start-Process -FilePath $exe -ArgumentList @('--data-dir', "`"$profile`"", '--quit-after', '4') -PassThru
+    $startupError = Join-Path $testRoot 'startup-stderr.txt'
+    $startupOutput = Join-Path $testRoot 'startup-stdout.txt'
+    $app = Start-Process -FilePath $exe -ArgumentList @('--data-dir', "`"$profile`"", '--quit-after', '4') -RedirectStandardError $startupError -RedirectStandardOutput $startupOutput -PassThru
     $deadline = (Get-Date).AddSeconds(20)
     do { Start-Sleep -Milliseconds 50; $app.Refresh() } while (-not $app.HasExited -and $app.MainWindowHandle -eq 0 -and (Get-Date) -lt $deadline)
     if ($app.MainWindowHandle -eq 0) { throw 'Installed native app did not show a window' }
     if (-not $app.WaitForExit(15000)) { Stop-Process -Id $app.Id; throw 'Installed app did not honor bounded development run' }
-    if ($app.ExitCode -ne 0) { throw "Installed app exit $($app.ExitCode)" }
+    if ($app.ExitCode -ne 0) { throw "Installed app exit $($app.ExitCode): $([IO.File]::ReadAllText($startupError))" }
 } finally {
     $uninstaller = Join-Path $installDir 'Uninstall NIP Native.exe'
     if (Test-Path -LiteralPath $uninstaller) {
