@@ -2,6 +2,8 @@
 
 Implementación Windows x64 en Rust: egui/eframe y AccessKit para la interfaz, CPAL/WASAPI para audio, Opus mono a 48 kHz y QUIC/TLS 1.3 con quinn/rustls. No incorpora Chromium ni WebView.
 
+La interfaz usa el driver OpenGL de Windows. El smoke gráfico del runner alojado utiliza [Mesa llvmpipe](https://github.com/pal1000/mesa-dist-win/blob/master/readme.md) con versión y checksum fijados, inyectado sólo en el directorio temporal de prueba después de instalar. Esas DLL no forman parte del instalador ni de las mediciones locales.
+
 La distribución nativa 0.2.0 usa un protocolo nuevo y se instala junto a Electron v0.1.2. La implementación nativa y la versión anterior se conservan en el repositorio; no hay migración automática de perfiles.
 
 ## Desarrollo sin reinstalar

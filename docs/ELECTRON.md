@@ -2,6 +2,8 @@
 
 Las instrucciones siguientes describen el cliente anterior. Para Rust nativo, ver [NIP nativo](NATIVE.md).
 
+La fuente correspondiente a esta distribución está en el tag `v0.1.2`. Las fuentes Electron de la rama de migración incluyen experimentos posteriores sin publicar; para reproducir esta versión usá un checkout independiente de ese tag.
+
 # NIP
 
 **name in progress**. Aplicación de escritorio para llamadas de amigos, con servidores que cada grupo aloja en su propio equipo. MVP para Windows x64: una sala de audio, invitaciones privadas y servidores recordados localmente.
