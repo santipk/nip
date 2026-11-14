@@ -37,8 +37,11 @@ try {
     [IO.File]::WriteAllText($notices, $noticeText.ToString(), [Text.UTF8Encoding]::new($false))
     $makensis = (Get-Command makensis -ErrorAction SilentlyContinue).Source
     if (-not $makensis) {
-        $candidate = Join-Path $env:ProgramFiles 'NSIS/makensis.exe'
-        if (Test-Path -LiteralPath $candidate) { $makensis = $candidate }
+        foreach ($programRoot in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+            if (-not $programRoot) { continue }
+            $candidate = Join-Path $programRoot 'NSIS/makensis.exe'
+            if (Test-Path -LiteralPath $candidate) { $makensis = $candidate; break }
+        }
     }
     if (-not $makensis) {
         $cache = Join-Path $env:LOCALAPPDATA 'electron-builder/Cache/nsis-3.0.4.1/nsis-3.0.4.1-1mx3n/Bin/makensis.exe'
