@@ -56,6 +56,8 @@ La prueba de extremo a extremo conecta dos clientes QUIC reales con fuente y sal
 
 La verificación interactiva recorrió las ocho combinaciones de escritorio/Inicio/apertura. Se comprobaron existencia y destino de los accesos, presencia de la ventana cuando se solicita abrir y ausencia del proceso cuando se desmarca. Las instalaciones de prueba usan un registro y nombres independientes y se desinstalan al terminar.
 
+También se verificó el portapapeles en la UI real de Windows con dos perfiles aislados: pegar texto Unicode, generar una invitación en el anfitrión, pulsar **Copiar invitación**, pegarla con Ctrl+V en el segundo cliente y conectar. La sala mostró a ambos participantes fuera de llamada y sin micrófono. La credencial no se imprimió ni se incluyó en capturas. Se cerraron ambos clientes y el servidor temporal al terminar. Esta comprobación usó un build local del mismo código nativo del tag `native-v0.2.0`; no requirió cambiar el binario ni publicar otra versión.
+
 ## Medición local
 
 Muestra de 10 segundos por aplicación con perfil nuevo, ventana de inicio, sin servidor ni audio; tres segundos de estabilización. Equipo con seis procesadores lógicos. No es un benchmark de llamadas ni un promedio de múltiples ejecuciones.
