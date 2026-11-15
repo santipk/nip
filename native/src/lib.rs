@@ -1,5 +1,11 @@
 pub mod audio;
+pub mod backup;
 pub mod contracts;
+pub mod desktop;
+pub mod dsp;
+pub mod files;
+pub mod history;
 pub mod network;
+pub mod relay;
 pub mod storage;
 pub mod ui;
