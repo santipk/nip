@@ -4,7 +4,7 @@
 
 ## Windows
 
-[Descargar NIP Native 0.2.0](https://github.com/santipk/nip/releases/tag/native-v0.2.0). El instalador se llama `NIP-Native-Setup-0.2.0-x64.exe`. Es una primera distribución nativa; la compatibilidad con audio físico y redes externas debe probarse con los equipos del grupo. Incluye checksum SHA-256 y avisos de dependencias.
+[Descargar NIP Native 0.3.0-beta.1](https://github.com/santipk/nip/releases/tag/native-v0.3.0-beta.1). El instalador se llama `NIP-Native-Setup-0.3.0-beta.1-x64.exe`. Es una versión preliminar; la compatibilidad con audio físico y redes externas debe probarse con los equipos del grupo. Incluye checksum SHA-256 y avisos de dependencias.
 
 Se instala por usuario, con accesos **NIP Native**, en una ubicación distinta de Electron. No reemplaza tu instalación anterior ni importa o borra sus datos. No requiere Rust, Node.js ni permisos de administrador para usarla. La distribución está **sin firma Authenticode**; la solicitud a SignPath Foundation fue recibida, con aprobación pendiente. Ver [política de firma y privacidad](CODE_SIGNING.md).
 
@@ -22,17 +22,18 @@ Para otro cliente, en otra terminal:
 .\scripts\dev-native.ps1 -Profile amigo -Release
 ```
 
-Cada comando compila incrementalmente y abre un perfil aislado en `work/`. Omití `-Release` para desarrollo. No instala la aplicación.
+Cada comando compila incrementalmente y abre un perfil aislado en `work/`, restringido a loopback. Para una prueba LAN/WAN explícita, agregar `-AllowNetwork`. Omití `-Release` para desarrollo. No instala la aplicación.
 
 ## Funciones
 
 - Servidores autohospedados con identidad estable e invitaciones privadas; secretos cifrados con DPAPI de Windows.
-- Chat sin entrar a una llamada: hasta 2000 caracteres Unicode por mensaje, cinco mensajes cada diez segundos por participante y los últimos cien mensajes en RAM del anfitrión.
+- Canales de texto y voz independientes, con administración desde el perfil del anfitrión. Chat sin entrar a voz e historial durable en servidores persistentes.
+- Adjuntos con descarga explícita, cuotas configurables y reintentos sin duplicados; backup cifrado con contraseña.
 - Audio Opus mono a 48 kHz, mute, deafen y prueba privada con suspensión del envío al grupo.
 - Entrada/salida, nivel de micrófono y volumen dentro de NIP; preferencias locales y ayudas accesibles en cada fila.
 - Instalador con opciones independientes para escritorio, Inicio y apertura inmediata. La desinstalación conserva los datos.
 
-El protocolo nativo usa QUIC/TLS 1.3 y necesita UDP alcanzable al anfitrión (45454 por defecto). No es compatible con las invitaciones Electron. No incluye DNS, NAT traversal, STUN/TURN ni relay público. El anfitrión retransmite audio y puede escucharlo: **no ofrece E2EE frente al anfitrión**. No incluye cancelación de eco, supresión de ruido ni remuestreo; los dispositivos deben admitir un formato de 48 kHz. Usá auriculares para la prueba privada.
+El protocolo nativo usa QUIC/TLS 1.3 y necesita UDP alcanzable al anfitrión (45454 por defecto). No es compatible con las invitaciones Electron. No incluye DNS, NAT traversal, STUN/TURN ni relay público. El anfitrión retransmite audio y puede escucharlo: **no ofrece E2EE frente al anfitrión**. Incluye procesamiento de audio opcional y remuestreo de dispositivos. El relay autoalojable requiere infraestructura propia; no hay servicio público preconfigurado ni WAN validada. Usá auriculares para la prueba privada.
 
 Ver [uso, seguridad, límites y mediciones reales](docs/NATIVE.md), [decisión de arquitectura](docs/adr/0001-native-rust.md) y [transición](docs/TRANSITION.md).
 
