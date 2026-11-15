@@ -5,7 +5,7 @@ Unicode true
 !include x64.nsh
 
 !ifndef VERSION
-  !define VERSION "0.2.0"
+  !define VERSION "0.3.0-beta.1"
 !endif
 !ifndef BINARY
   !error "BINARY must identify the verified native release executable"
@@ -36,13 +36,15 @@ RequestExecutionLevel user
 ManifestDPIAware true
 SetCompressor /SOLID lzma
 InstallDirRegKey HKCU "${REGKEY}" "InstallLocation"
-VIProductVersion "0.2.0.0"
+VIProductVersion "0.3.0.0"
 VIAddVersionKey "ProductName" "NIP"
 VIAddVersionKey "FileDescription" "Instalador de NIP Native"
 VIAddVersionKey "ProductVersion" "${VERSION}"
 VIAddVersionKey "FileVersion" "${VERSION}"
 VIAddVersionKey "LegalCopyright" "Copyright (c) 2026 Santiago Abregu"
 !define MUI_ABORTWARNING
+!define MUI_ICON "assets\nip-cat.ico"
+!define MUI_UNICON "assets\nip-cat.ico"
 !insertmacro MUI_PAGE_LICENSE "..\LICENSE"
 !insertmacro MUI_PAGE_INSTFILES
 Page custom FinishCreate FinishLeave
@@ -106,7 +108,11 @@ Function FinishLeave
   ${NSD_GetState} $DesktopCheckbox $0
   ${If} $0 == ${BST_CHECKED}
     ClearErrors
-    CreateShortCut "$DESKTOP\${PRODUCT}.lnk" "$INSTDIR\${APP_EXE}"
+    !ifdef TEST_BUILD
+      CreateShortCut "$DESKTOP\${PRODUCT}.lnk" "$INSTDIR\${APP_EXE}" '--local-only --data-dir $\"$INSTDIR\profile-test$\"'
+    !else
+      CreateShortCut "$DESKTOP\${PRODUCT}.lnk" "$INSTDIR\${APP_EXE}"
+    !endif
     ${If} ${Errors}
       MessageBox MB_OK "No se pudo crear el acceso en el escritorio. Reintentá o desmarcá la opción."
       Abort
@@ -115,7 +121,11 @@ Function FinishLeave
   ${NSD_GetState} $StartCheckbox $0
   ${If} $0 == ${BST_CHECKED}
     ClearErrors
-    CreateShortCut "$SMPROGRAMS\${PRODUCT}.lnk" "$INSTDIR\${APP_EXE}"
+    !ifdef TEST_BUILD
+      CreateShortCut "$SMPROGRAMS\${PRODUCT}.lnk" "$INSTDIR\${APP_EXE}" '--local-only --data-dir $\"$INSTDIR\profile-test$\"'
+    !else
+      CreateShortCut "$SMPROGRAMS\${PRODUCT}.lnk" "$INSTDIR\${APP_EXE}"
+    !endif
     ${If} ${Errors}
       MessageBox MB_OK "No se pudo crear el acceso en Inicio. Reintentá o desmarcá la opción."
       Abort
@@ -125,7 +135,7 @@ Function FinishLeave
   ${If} $0 == ${BST_CHECKED}
     ClearErrors
     !ifdef TEST_BUILD
-      ExecShell "open" "$INSTDIR\${APP_EXE}" '--data-dir $\"$EXEDIR\profile-test$\"'
+      ExecShell "open" "$INSTDIR\${APP_EXE}" '--local-only --data-dir $\"$INSTDIR\profile-test$\"'
     !else
       ExecShell "open" "$INSTDIR\${APP_EXE}"
     !endif

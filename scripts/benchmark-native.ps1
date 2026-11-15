@@ -33,7 +33,7 @@ foreach ($kind in @('electron', 'native')) {
         Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
         Remove-Item Env:NIP_NATIVE_SYNTHETIC -ErrorAction SilentlyContinue
         if ($kind -eq 'native') {
-            $process = Start-Process -FilePath $exe -ArgumentList @('--data-dir', "`"$profile`"") -PassThru
+            $process = Start-Process -FilePath $exe -ArgumentList @('--data-dir', "`"$profile`"", '--local-only') -PassThru
         } else {
             $env:NIP_DATA_DIR = $profile
             $process = Start-Process -FilePath $exe -PassThru

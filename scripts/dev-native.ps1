@@ -1,6 +1,7 @@
 param(
     [ValidatePattern('^[a-zA-Z0-9_-]+$')][string]$Profile = 'dev',
-    [switch]$Release
+    [switch]$Release,
+    [switch]$AllowNetwork
 )
 $ErrorActionPreference = 'Stop'
 $workspace = Split-Path $PSScriptRoot -Parent
@@ -14,6 +15,7 @@ try {
     $arguments = @('run', '--locked')
     if ($Release) { $arguments += '--release' }
     $arguments += @('--bin', 'nip-native', '--', '--data-dir', $data)
+    if (-not $AllowNetwork) { $arguments += '--local-only' }
     & $cargo @arguments
     if ($LASTEXITCODE -ne 0) { throw "Native run failed: $LASTEXITCODE" }
 } finally { Pop-Location }
